@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Audio Recording</string>
+    <string name="notification_recording">Recording...</string>
+    <string name="sort_by">Sort By...</string>
+    <string name="searchname">Search...</string>
+    <string name="sort_by_name_a_z">Name A-Z</string>
+    <string name="sort_by_name_z_a">Name Z-A</string>
+    <string name="sort_by_date_ask">Date Asc</string>
+    <string name="sort_by_date_desc">Date Desc</string>
+</resources>
