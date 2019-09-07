@@ -1,17 +1,20 @@
 package com.bluapp.audiorecording;
 
 import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Handler;
-import android.os.Message;
-import android.util.Log;
 import android.view.View;
+import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.AppCompatImageView;
 import androidx.appcompat.widget.AppCompatTextView;
 import androidx.appcompat.widget.LinearLayoutCompat;
@@ -19,27 +22,29 @@ import androidx.appcompat.widget.LinearLayoutCompat;
 import com.mikepenz.fastadapter.FastAdapter;
 import com.mikepenz.fastadapter.items.AbstractItem;
 
-import java.io.IOException;
+import java.io.File;
+import java.net.URLConnection;
 import java.util.Formatter;
 import java.util.List;
 import java.util.Locale;
 
-public class RecordListAdapter extends AbstractItem<RecordListAdapter, RecordListAdapter.ViewHolder> implements MediaStopObs.MediaStopInterface {
+public class RecordListAdapter extends AbstractItem<RecordListAdapter, RecordListAdapter.ViewHolder> {
 
 
     private final int VIEW_TYPE = 2222;
     private RecordListModel recordListModel;
     private Context context;
-    private static MediaPlayer player;
+    private MediaPlayer player;
     private int playingposition;
     private int viewposition = -1;
+    private RecyclerSelectInterface recyclerSelectInterface;
 
 
-    public RecordListAdapter(RecordListModel recordListModel, Context context) {
+    public RecordListAdapter(RecordListModel recordListModel, Context context, RecyclerSelectInterface recyclerSelectInterface) {
         this.context = context;
         this.recordListModel = recordListModel;
         this.playingposition = -1;
-        MediaStopObs.getInstance().setListener(this);
+        this.recyclerSelectInterface = recyclerSelectInterface;
     }
 
     public RecordListModel getRecordListModel() {
@@ -64,14 +69,6 @@ public class RecordListAdapter extends AbstractItem<RecordListAdapter, RecordLis
         return R.layout.record_list;
     }
 
-    @Override
-    public void releasemediaplayer() {
-        if (null != player) {
-            releaseMediaPlayer();
-        }
-    }
-
-
 
     public class ViewHolder extends FastAdapter.ViewHolder<RecordListAdapter> implements View.OnClickListener, SeekBar.OnSeekBarChangeListener {
         private AppCompatImageView rate;
@@ -92,11 +89,10 @@ public class RecordListAdapter extends AbstractItem<RecordListAdapter, RecordLis
         private Handler mHandler = new Handler();
         private StringBuilder mFormatBuilder;
         private Formatter mFormatter;
+        private RecordDAO recordDAO;
 
 
-
-
-        public ViewHolder(View itemView) {
+        private ViewHolder(View itemView) {
             super(itemView);
             rate = (AppCompatImageView) itemView.findViewById(R.id.rate);
             recordTitle = (AppCompatTextView) itemView.findViewById(R.id.record_title);
@@ -112,10 +108,15 @@ public class RecordListAdapter extends AbstractItem<RecordListAdapter, RecordLis
             edit = (AppCompatImageView) itemView.findViewById(R.id.edit);
             share = (AppCompatImageView) itemView.findViewById(R.id.share);
             delete = (AppCompatImageView) itemView.findViewById(R.id.delete);
+            recordDAO = (RecordDAO) RecordDatabase.getInstance(context).recordDAO();
             mFormatBuilder = new StringBuilder();
             mFormatter = new Formatter(mFormatBuilder, Locale.getDefault());
             mediacontrollerProgress.setOnSeekBarChangeListener(this);
+            rate.setOnClickListener(this);
             play.setOnClickListener(this);
+            edit.setOnClickListener(this);
+            share.setOnClickListener(this);
+            delete.setOnClickListener(this);
             detailsLayout.setOnClickListener(this);
 
 
@@ -134,13 +135,16 @@ public class RecordListAdapter extends AbstractItem<RecordListAdapter, RecordLis
                 rate.setImageResource(R.drawable.ic_empstar);
             }
 
+            if (getAdapterPosition() != viewposition) {
+                controllerLayout.setVisibility(View.GONE);
+            }
+
             if (getAdapterPosition() == playingposition) {
                 updateSeekBar();
             } else {
                 updateNonPlayingView();
             }
         }
-
 
 
         @Override
@@ -157,13 +161,25 @@ public class RecordListAdapter extends AbstractItem<RecordListAdapter, RecordLis
         @Override
         public void onClick(View view) {
             switch (view.getId()) {
+                case R.id.rate:
+                    if(currentItem.getRecordListModel().getRate()){
+                        recordDAO.updaterate(false, currentItem.getRecordListModel().getId());
+                    }else{
+                        recordDAO.updaterate(true, currentItem.getRecordListModel().getId());
+                    }
+                    break;
                 case R.id.detailsLayout:
                     if (getAdapterPosition() == viewposition) {
                         controllerLayout.setVisibility(View.GONE);
-                    }else{
+                        viewposition = -1;
+                    } else {
                         controllerLayout.setVisibility(View.VISIBLE);
                         viewposition = getAdapterPosition();
                     }
+                    if (player != null && player.isPlaying()) {
+                        releaseMediaPlayer();
+                    }
+                    recyclerSelectInterface.selectedrecord();
                     break;
                 case R.id.play:
                     if (getAdapterPosition() == playingposition) {
@@ -185,11 +201,85 @@ public class RecordListAdapter extends AbstractItem<RecordListAdapter, RecordLis
                         updateSeekBar();
                     }
                     break;
+                case R.id.edit:
+                    editDialog();
+                    break;
+                case R.id.share:
+                    Intent intentShareFile = new Intent(Intent.ACTION_SEND);
+                    intentShareFile.setType(URLConnection.guessContentTypeFromName(currentItem.getRecordListModel().getTitle()));
+                    intentShareFile.putExtra(Intent.EXTRA_STREAM, Uri.parse(currentItem.getRecordListModel().getFilepath()));
+                    context.startActivity(Intent.createChooser(intentShareFile, "Share File"));
+                    break;
+                case R.id.delete:
+                    deleteDialog();
+                    break;
             }
         }
 
+        private void editDialog() {
+            AlertDialog.Builder builder = new AlertDialog.Builder(context);
+            builder.setTitle("Rename Recording");
+            final EditText input = new EditText(context);
+            String  resultName= currentItem.getRecordListModel().getTitle().replace(".mp3", "");
+            input.setText(resultName);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT);
+            input.setLayoutParams(lp);
+            builder.setView(input);
+            builder.setCancelable(true);
+            builder.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int id) {
+                    dialog.cancel();
+                    String recordname = input.getText().toString();
+                    if (recordname.equals("")) {
+                        Toast.makeText(context, "Field is empty", Toast.LENGTH_LONG).show();
+                    } else {
+                        File file = new File(currentItem.getRecordListModel().getFilepath());
+                        File absolutepath = new File(file.getAbsolutePath());
+                        if (file.exists()) {
+                            File oldfile = new File(currentItem.getRecordListModel().getFilepath());
+                            File newfile = new File(absolutepath.getParent(),recordname+".mp3");
+                            if(oldfile.renameTo(newfile)){
+                                recordDAO.update(recordname+".mp3", newfile.toString(), currentItem.getRecordListModel().getId());
+                            }
+                        }
+                    }
+                }
+            });
+            builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int id) {
+                    dialog.cancel();
+                }
+            });
+            AlertDialog alert = builder.create();
+            alert.show();
+        }
 
-        public void playAudio() {
+        private void deleteDialog() {
+            AlertDialog.Builder builder = new AlertDialog.Builder(context);
+            builder.setTitle("Delete Recording");
+            builder.setMessage("...\\" + currentItem.getRecordListModel().getTitle() + "\n\n" + "Are you sure?");
+            builder.setCancelable(true);
+            builder.setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int id) {
+                    dialog.cancel();
+                    File file = new File(currentItem.getRecordListModel().getFilepath());
+                    if (file.exists()) {
+                        if (file.delete()) {
+                            recordDAO.delete(currentItem.getRecordListModel().getId());
+                        }
+                    }
+                }
+            });
+            builder.setNegativeButton("No", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int id) {
+                    dialog.cancel();
+                }
+            });
+            AlertDialog alert = builder.create();
+            alert.show();
+        }
+
+        private void playAudio() {
             Uri trackUri = Uri.parse(currentItem.getRecordListModel().getFilepath());
             player = MediaPlayer.create(context, trackUri);
             player.setAudioStreamType(AudioManager.STREAM_MUSIC);
@@ -224,14 +314,13 @@ public class RecordListAdapter extends AbstractItem<RecordListAdapter, RecordLis
 
         private void updateSeekBar() {
             mediacontrollerProgress.setMax(player.getDuration());
-            Toast.makeText(context,"hello",Toast.LENGTH_SHORT).show();
             mHandler.postDelayed(mUpdateTimeTask, 100);
         }
 
         private Runnable mUpdateTimeTask = new Runnable() {
             @Override
             public void run() {
-                if(player != null){
+                if (player != null) {
                     int currentPosition = player.getCurrentPosition();
                     int total = player.getDuration();
                     if (total != 0) {
@@ -259,8 +348,8 @@ public class RecordListAdapter extends AbstractItem<RecordListAdapter, RecordLis
         }
 
         private void updateNonPlayingView() {
-                mHandler.removeCallbacks(mUpdateTimeTask);
-                mediacontrollerProgress.setProgress(0);
+            mHandler.removeCallbacks(mUpdateTimeTask);
+            mediacontrollerProgress.setProgress(0);
         }
 
     }
@@ -270,7 +359,6 @@ public class RecordListAdapter extends AbstractItem<RecordListAdapter, RecordLis
         player = null;
         playingposition = -1;
     }
-
 
 
 }

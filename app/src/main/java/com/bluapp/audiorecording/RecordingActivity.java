@@ -18,8 +18,12 @@ import com.bluapp.audiorecording.RecordingService.RecordBinder;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.AppCompatTextView;
 
 import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 public class RecordingActivity extends AppCompatActivity {
     private ImageButton cancelBtn;
@@ -29,8 +33,8 @@ public class RecordingActivity extends AppCompatActivity {
     private RecordingService recordSrv;
     private boolean recordBound = false;
     public static String STARTFOREGROUND_ACTION = "action.startforeground";
-
-
+    private AppCompatTextView recordName;
+    private String currentDateandTime;
 
 
 
@@ -40,7 +44,13 @@ public class RecordingActivity extends AppCompatActivity {
         setContentView(R.layout.activity_recording);
         cancelBtn = (ImageButton) findViewById(R.id.cancelBtn);
         saveBtn = (ImageButton) findViewById(R.id.saveBtn);
+        recordName = (AppCompatTextView) findViewById(R.id.recordName);
         recordTime = (Chronometer) findViewById(R.id.record_time);
+
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH.mm.ss", Locale.getDefault());
+        currentDateandTime = sdf.format(new Date());
+
+        recordName.setText(currentDateandTime+".mp3");
 
         saveBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -131,6 +141,7 @@ public class RecordingActivity extends AppCompatActivity {
             onstartRecordingAudio(true);
             recordIntent = new Intent(this, RecordingService.class);
             recordIntent.setAction(STARTFOREGROUND_ACTION);
+            recordIntent.putExtra("RecordName",currentDateandTime);
             bindService(recordIntent, recordConnection, BIND_AUTO_CREATE | BIND_IMPORTANT);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(recordIntent);

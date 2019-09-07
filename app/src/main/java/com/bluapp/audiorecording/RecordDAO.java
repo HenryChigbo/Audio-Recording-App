@@ -14,13 +14,19 @@ public interface RecordDAO {
     @Query("select * from records")
     LiveData<List<Record>> getAllRecord();
 
+    @Query("select * from records WHERE rate = :rate")
+    LiveData<List<Record>> getRecordByStar(Boolean rate);
+
     @Insert(onConflict = REPLACE)
     public void insert(Record record);
 
-    @Update
-    public void update(Record record);
+    @Query("UPDATE records SET title = :title, filepath = :filepath WHERE id = :id")
+    public void update(String title, String filepath, int id);
 
-    @Delete
-    public void delete(Record record);
+    @Query("UPDATE records SET rate = :rate WHERE id = :id")
+    public void updaterate(Boolean rate, int id);
+
+    @Query("DELETE FROM records WHERE id = :id")
+    public void delete(int id);
 
 }

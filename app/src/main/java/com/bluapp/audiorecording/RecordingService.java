@@ -82,11 +82,14 @@ public class RecordingService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if(intent != null) {
             if (intent.getAction().equals(STARTFOREGROUND_ACTION)) {
+                currentDateandTime = intent.getExtras().getString("RecordName");
                 startRecording();
             }
         }
         return START_STICKY;
     }
+
+
 
     public void startRecording() {
         setFileNameAndPath();
@@ -130,8 +133,6 @@ public class RecordingService extends Service {
 
     public void setFileNameAndPath(){
         int count = 0;
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH.mm.ss", Locale.getDefault());
-        currentDateandTime = sdf.format(new Date());
         do{
             count++;
             mFileName = currentDateandTime + ".mp3";

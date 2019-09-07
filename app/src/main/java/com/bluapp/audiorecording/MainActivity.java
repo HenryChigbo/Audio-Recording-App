@@ -15,6 +15,8 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.AppCompatImageView;
+import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.appcompat.widget.SearchView;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -36,9 +38,11 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-public class MainActivity extends AppCompatActivity{
+public class MainActivity extends AppCompatActivity implements RecyclerSelectInterface{
     private FloatingActionButton recordBtn;
     private RecyclerView recyclerView;
+    private LinearLayoutCompat allRecord;
+    private LinearLayoutCompat ratedRecord;
     private Menu menu;
     private ItemAdapter<RecordListAdapter> recorditemAdapter;
     public FastAdapter<RecordListAdapter> recordfastAdapter;
@@ -47,6 +51,8 @@ public class MainActivity extends AppCompatActivity{
     private boolean isSortbyDateAsc = false;
     private boolean isSortbyDateDesc = false;
     private RecordDAO recordDAO;
+    private boolean getRecordByAll = true;
+    private boolean getRecordByRated = false;
 
 
     @Override
@@ -55,14 +61,35 @@ public class MainActivity extends AppCompatActivity{
         setContentView(R.layout.activity_main);
         recordBtn = (FloatingActionButton) findViewById(R.id.record_btn);
         recyclerView = (RecyclerView) findViewById(R.id.list);
+        allRecord = (LinearLayoutCompat) findViewById(R.id.allRecord);
+        ratedRecord = (LinearLayoutCompat) findViewById(R.id.ratedRecord);
         recordDAO = (RecordDAO) RecordDatabase.getInstance(getApplicationContext()).recordDAO();
 
         permissionRequest();
         initRecyclerView();
+
         recordBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 startActivity(new Intent(MainActivity.this, RecordingActivity.class));
+            }
+        });
+
+        allRecord.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                getRecordByAll = true;
+                getRecordByRated = false;
+                getRecordList();
+            }
+        });
+
+        ratedRecord.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                getRecordByRated = true;
+                getRecordByAll = false;
+                getRecordList();
             }
         });
     }
@@ -82,55 +109,15 @@ public class MainActivity extends AppCompatActivity{
         recorditemAdapter = new ItemAdapter<>();
         recordfastAdapter = FastAdapter.with(recorditemAdapter);
         recyclerView.setAdapter(recordfastAdapter);
-        recordDAO.getAllRecord().observe(this, (List<Record> record) -> {
-            if(dataSource.size() > 0){
-                dataSource.clear();
-                recorditemAdapter.clear();
-            }
-            for (int i = 0; i < record.size(); i++) {
-                int id = record.get(i).getId();
-                String title = record.get(i).getTitle();
-                String filepath = record.get(i).getFilepath();
-                String length = record.get(i).getLength();
-                Boolean rate = record.get(i).getRate();
-                String filesize = record.get(i).getFilesize();
-                String createdtime = record.get(i).getCreatedtime();
-                dataSource.add(new RecordListAdapter(new RecordListModel(id, title, filepath, length, rate, filesize, createdtime), this));
-            }
-            if (isSortbyNameAsc) {
-                Collections.sort(dataSource, new Comparator<RecordListAdapter>() {
-                    public int compare(RecordListAdapter a, RecordListAdapter b) {
-                        return a.getRecordListModel().getTitle().compareTo(b.getRecordListModel().getTitle());
-                    }
-                });
-            } else if (isSortbyNameDesc) {
-                Collections.sort(dataSource, new Comparator<RecordListAdapter>() {
-                    public int compare(RecordListAdapter a, RecordListAdapter b) {
-                        return a.getRecordListModel().getTitle().compareTo(b.getRecordListModel().getTitle());
-                    }
-                });
-                Collections.reverse(dataSource);
-            } else if (isSortbyDateAsc) {
-                Collections.sort(dataSource, new Comparator<RecordListAdapter>() {
-                    public int compare(RecordListAdapter a, RecordListAdapter b) {
-                        return a.getRecordListModel().getCreatedtime().compareTo(b.getRecordListModel().getCreatedtime());
-                    }
-                });
-            } else if (isSortbyDateDesc) {
-                Collections.sort(dataSource, new Comparator<RecordListAdapter>() {
-                    public int compare(RecordListAdapter a, RecordListAdapter b) {
-                        return a.getRecordListModel().getCreatedtime().compareTo(b.getRecordListModel().getCreatedtime());
-                    }
-                });
-                Collections.reverse(dataSource);
-            }
-
-            recorditemAdapter.add(dataSource);
-        });
-
-
-
-
+        if(getRecordByAll){
+            recordDAO.getAllRecord().observe(this, (List<Record> record) -> {
+                RecordDataSource(record, dataSource);
+            });
+        }else{
+            recordDAO.getRecordByStar(true).observe(this, (List<Record> record) -> {
+                RecordDataSource(record, dataSource);
+            });
+        }
 
         // recordfastAdapter.withOnClickListener((v, adapter, item, position) -> {
 
@@ -149,6 +136,52 @@ public class MainActivity extends AppCompatActivity{
             }
         });
 
+    }
+
+    private void RecordDataSource(List<Record> record, List<RecordListAdapter> dataSource){
+        if(dataSource.size() > 0){
+            dataSource.clear();
+            recorditemAdapter.clear();
+        }
+        for (int i = 0; i < record.size(); i++) {
+            int id = record.get(i).getId();
+            String title = record.get(i).getTitle();
+            String filepath = record.get(i).getFilepath();
+            String length = record.get(i).getLength();
+            Boolean rate = record.get(i).getRate();
+            String filesize = record.get(i).getFilesize();
+            String createdtime = record.get(i).getCreatedtime();
+            dataSource.add(new RecordListAdapter(new RecordListModel(id, title, filepath, length, rate, filesize, createdtime), this, this));
+        }
+        if (isSortbyNameAsc) {
+            Collections.sort(dataSource, new Comparator<RecordListAdapter>() {
+                public int compare(RecordListAdapter a, RecordListAdapter b) {
+                    return a.getRecordListModel().getTitle().compareTo(b.getRecordListModel().getTitle());
+                }
+            });
+        } else if (isSortbyNameDesc) {
+            Collections.sort(dataSource, new Comparator<RecordListAdapter>() {
+                public int compare(RecordListAdapter a, RecordListAdapter b) {
+                    return a.getRecordListModel().getTitle().compareTo(b.getRecordListModel().getTitle());
+                }
+            });
+            Collections.reverse(dataSource);
+        } else if (isSortbyDateAsc) {
+            Collections.sort(dataSource, new Comparator<RecordListAdapter>() {
+                public int compare(RecordListAdapter a, RecordListAdapter b) {
+                    return a.getRecordListModel().getCreatedtime().compareTo(b.getRecordListModel().getCreatedtime());
+                }
+            });
+        } else if (isSortbyDateDesc) {
+            Collections.sort(dataSource, new Comparator<RecordListAdapter>() {
+                public int compare(RecordListAdapter a, RecordListAdapter b) {
+                    return a.getRecordListModel().getCreatedtime().compareTo(b.getRecordListModel().getCreatedtime());
+                }
+            });
+            Collections.reverse(dataSource);
+        }
+
+        recorditemAdapter.add(dataSource);
     }
 
 
@@ -277,8 +310,7 @@ public class MainActivity extends AppCompatActivity{
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
-     MediaStopObs.getInstance().changeState(true);
+    public void selectedrecord() {
+        recordfastAdapter.notifyAdapterDataSetChanged();
     }
 }
